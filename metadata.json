@@ -1,0 +1,6 @@
+{
+  "name": "gpsf",
+  "description": "An Android application for mocking GPS location.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
