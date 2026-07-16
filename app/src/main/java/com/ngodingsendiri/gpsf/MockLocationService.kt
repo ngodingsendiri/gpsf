@@ -34,13 +34,13 @@ class MockLocationService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             "START" -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    startForeground(1001, buildNotification(), android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
-                } else {
-                    startForeground(1001, buildNotification())
-                }
                 val lat = intent.getDoubleExtra("LAT", 0.0)
                 val lng = intent.getDoubleExtra("LNG", 0.0)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    startForeground(1001, buildNotification(lat, lng), android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+                } else {
+                    startForeground(1001, buildNotification(lat, lng))
+                }
                 startMocking(lat, lng)
             }
             "STOP" -> {
@@ -60,7 +60,21 @@ class MockLocationService : Service() {
         scope.cancel()
     }
 
+    @kotlin.jvm.Volatile
+    private var targetLat = 0.0
+    @kotlin.jvm.Volatile
+    private var targetLng = 0.0
+
     private fun startMocking(lat: Double, lng: Double) {
+        targetLat = lat
+        targetLng = lng
+
+        if (_isRunning.value) {
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            nm.notify(1001, buildNotification(lat, lng))
+            return
+        }
+
         val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
         
         var hasSecurityException = false
@@ -93,7 +107,7 @@ class MockLocationService : Service() {
         mockJob?.cancel()
         mockJob = scope.launch {
             while (isActive && _isRunning.value) {
-                updateLocation(lm, lat, lng)
+                updateLocation(lm, targetLat, targetLng)
                 delay(1000)
             }
         }
@@ -140,16 +154,17 @@ class MockLocationService : Service() {
         getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
     }
 
-    private fun buildNotification(): Notification {
+    private fun buildNotification(lat: Double, lng: Double): Notification {
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val pi = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
         val builder = Notification.Builder(this, "fake_gps")
+        val coordText = String.format(java.util.Locale.US, "Lokasi: %.5f, %.5f (Jitter 50m)", lat, lng)
 
         return builder.setContentTitle("MockGPS Aktif")
-            .setContentText("Menjalankan lokasi palsu dalam radius 50m")
+            .setContentText(coordText)
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setContentIntent(pi)
             .setOngoing(true)

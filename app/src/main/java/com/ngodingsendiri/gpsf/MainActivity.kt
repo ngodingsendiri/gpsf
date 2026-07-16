@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -95,6 +96,7 @@ fun PulsingDot() {
 fun MockGpsApp() {
     var lat by remember { mutableDoubleStateOf(-6.2000) }
     var lng by remember { mutableDoubleStateOf(106.8166) }
+    var centerMapTrigger by remember { mutableIntStateOf(0) }
     
     val isRunning by MockLocationService.isRunning.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
@@ -116,6 +118,7 @@ fun MockGpsApp() {
                 modifier = Modifier.fillMaxSize(),
                 lat = lat,
                 lng = lng,
+                centerMapTrigger = centerMapTrigger,
                 onSelect = { newLat, newLng ->
                     lat = newLat
                     lng = newLng
@@ -129,19 +132,41 @@ fun MockGpsApp() {
                 }
             )
 
-            FilledIconButton(
-                onClick = { ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)) },
+            Column(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .statusBarsPadding()
-                    .padding(top = 16.dp, end = 16.dp)
-                    .size(48.dp),
-                colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
-                ),
-                shape = CircleShape
+                    .padding(top = 16.dp, end = 16.dp),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Icon(Icons.Rounded.Settings, "Developer Options", tint = MaterialTheme.colorScheme.onSurface)
+                // Developer Options Button
+                FilledIconButton(
+                    onClick = { ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)) },
+                    modifier = Modifier.size(48.dp),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+                    ),
+                    shape = CircleShape
+                ) {
+                    Icon(Icons.Rounded.Settings, "Developer Options", tint = MaterialTheme.colorScheme.onSurface)
+                }
+
+                // Center on Pin Button
+                FilledIconButton(
+                    onClick = { centerMapTrigger++ },
+                    modifier = Modifier.size(48.dp),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+                    ),
+                    shape = CircleShape
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Place,
+                        contentDescription = "Pusatkan ke Pin",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
 
             Card(
@@ -229,12 +254,32 @@ fun getCirclePoints(centerLat: Double, centerLng: Double, radiusMeters: Double):
 }
 
 @Composable
-fun OsmMap(modifier: Modifier = Modifier, lat: Double, lng: Double, onSelect: (Double, Double) -> Unit) {
+fun OsmMap(
+    modifier: Modifier = Modifier, 
+    lat: Double, 
+    lng: Double, 
+    centerMapTrigger: Int,
+    onSelect: (Double, Double) -> Unit
+) {
     var mapView by remember { mutableStateOf<MapView?>(null) }
     var marker by remember { mutableStateOf<Marker?>(null) }
     var circle by remember { mutableStateOf<Polygon?>(null) }
     val isDark = isSystemInDarkTheme()
     val currentOnSelect by rememberUpdatedState(onSelect)
+
+    // Optimize: Cache the 72 point allocations, only recalculate when lat/lng shifts
+    val circlePoints = remember(lat, lng) {
+        getCirclePoints(lat, lng, 50.0)
+    }
+
+    // Handles manual centering requests from the floating center-on-pin action button
+    LaunchedEffect(centerMapTrigger) {
+        if (centerMapTrigger > 0) {
+            mapView?.let {
+                it.controller.animateTo(GeoPoint(lat, lng))
+            }
+        }
+    }
 
     AndroidView(
         modifier = modifier,
@@ -249,7 +294,7 @@ fun OsmMap(modifier: Modifier = Modifier, lat: Double, lng: Double, onSelect: (D
                 controller.setCenter(pt)
 
                 val c = Polygon().apply {
-                    points = getCirclePoints(lat, lng, 50.0)
+                    points = circlePoints
                     fillPaint.color = android.graphics.Color.parseColor(if(isDark) "#4490CAF9" else "#441976D2")
                     outlinePaint.color = android.graphics.Color.parseColor(if(isDark) "#8890CAF9" else "#881976D2")
                     outlinePaint.strokeWidth = 3f
@@ -270,6 +315,7 @@ fun OsmMap(modifier: Modifier = Modifier, lat: Double, lng: Double, onSelect: (D
                     override fun singleTapConfirmedHelper(p: GeoPoint?): Boolean {
                         p?.let {
                             currentOnSelect(it.latitude, it.longitude)
+                            controller.animateTo(it) // Smoothly center on selection
                         }
                         return true
                     }
@@ -279,8 +325,9 @@ fun OsmMap(modifier: Modifier = Modifier, lat: Double, lng: Double, onSelect: (D
             }
         },
         update = {
-            marker?.position = GeoPoint(lat, lng)
-            circle?.points = getCirclePoints(lat, lng, 50.0)
+            val pt = GeoPoint(lat, lng)
+            marker?.position = pt
+            circle?.points = circlePoints
             circle?.fillPaint?.color = android.graphics.Color.parseColor(if(isDark) "#4490CAF9" else "#441976D2")
             circle?.outlinePaint?.color = android.graphics.Color.parseColor(if(isDark) "#8890CAF9" else "#881976D2")
             it.invalidate()
