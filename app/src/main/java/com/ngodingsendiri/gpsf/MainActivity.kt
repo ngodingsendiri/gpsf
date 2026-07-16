@@ -31,7 +31,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import kotlinx.coroutines.flow.collectLatest
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapEventsReceiver
@@ -52,6 +55,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         Configuration.getInstance().load(this, getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
         Configuration.getInstance().userAgentValue = packageName
+        Configuration.getInstance().cacheMapTileCount = 12.toShort()
+        Configuration.getInstance().cacheMapTileOvershoot = 4.toShort()
         
         val perms = mutableListOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
         if (Build.VERSION.SDK_INT >= 28) perms.add(Manifest.permission.FOREGROUND_SERVICE)
@@ -94,13 +99,24 @@ fun PulsingDot() {
 
 @Composable
 fun MockGpsApp() {
-    var lat by remember { mutableDoubleStateOf(-6.2000) }
-    var lng by remember { mutableDoubleStateOf(106.8166) }
+    val ctx = LocalContext.current
+    val sharedPrefs = remember(ctx) { ctx.getSharedPreferences("mock_gps_prefs", Context.MODE_PRIVATE) }
+
+    var lat by remember { mutableDoubleStateOf(sharedPrefs.getFloat("lat", -6.2000f).toDouble()) }
+    var lng by remember { mutableDoubleStateOf(sharedPrefs.getFloat("lng", 106.8166f).toDouble()) }
     var centerMapTrigger by remember { mutableIntStateOf(0) }
     
     val isRunning by MockLocationService.isRunning.collectAsStateWithLifecycle()
-    val ctx = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // Restore last coordinates from running service if active when app opens
+    LaunchedEffect(Unit) {
+        if (MockLocationService.isRunning.value) {
+            lat = MockLocationService.currentLat.value
+            lng = MockLocationService.currentLng.value
+            centerMapTrigger++ // Center map on active mock pin automatically on start
+        }
+    }
 
     LaunchedEffect(Unit) {
         MockLocationService.errorEvent.collectLatest { msg ->
@@ -122,6 +138,7 @@ fun MockGpsApp() {
                 onSelect = { newLat, newLng ->
                     lat = newLat
                     lng = newLng
+                    sharedPrefs.edit().putFloat("lat", newLat.toFloat()).putFloat("lng", newLng.toFloat()).apply()
                     if (isRunning) {
                         ctx.startService(Intent(ctx, MockLocationService::class.java).apply {
                             action = "START"
@@ -217,6 +234,7 @@ fun MockGpsApp() {
                             if (isRunning) {
                                 ctx.startService(Intent(ctx, MockLocationService::class.java).apply { action = "STOP" })
                             } else {
+                                sharedPrefs.edit().putFloat("lat", lat.toFloat()).putFloat("lng", lng.toFloat()).apply()
                                 val intent = Intent(ctx, MockLocationService::class.java).apply {
                                     action = "START"
                                     putExtra("LAT", lat)
@@ -334,5 +352,23 @@ fun OsmMap(
         }
     )
 
-    DisposableEffect(Unit) { onDispose { mapView?.onDetach() } }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, mapView) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    mapView?.onResume()
+                }
+                Lifecycle.Event.ON_PAUSE -> {
+                    mapView?.onPause()
+                }
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            mapView?.onDetach()
+        }
+    }
 }

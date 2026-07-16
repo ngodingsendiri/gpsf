@@ -20,11 +20,18 @@ class MockLocationService : Service() {
         private val _isRunning = MutableStateFlow(false)
         val isRunning = _isRunning.asStateFlow()
         val errorEvent = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 1)
+
+        private val _currentLat = MutableStateFlow(-6.2000)
+        val currentLat = _currentLat.asStateFlow()
+
+        private val _currentLng = MutableStateFlow(106.8166)
+        val currentLng = _currentLng.asStateFlow()
     }
 
     private val providers = arrayOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
     private val scope = CoroutineScope(Dispatchers.Default + Job())
     private var mockJob: Job? = null
+    private val locationCache = mutableMapOf<String, Location>()
 
     override fun onCreate() {
         super.onCreate()
@@ -68,6 +75,8 @@ class MockLocationService : Service() {
     private fun startMocking(lat: Double, lng: Double) {
         targetLat = lat
         targetLng = lng
+        _currentLat.value = lat
+        _currentLng.value = lng
 
         if (_isRunning.value) {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -130,11 +139,13 @@ class MockLocationService : Service() {
         val w = radiusInDegrees * sqrt(Random.nextDouble())
         val t = 2.0 * Math.PI * Random.nextDouble()
         val randomLat = baseLat + (w * sin(t))
-        val randomLng = baseLng + ((w * cos(t)) / cos(Math.toRadians(baseLat)))
+        val cosLat = cos(Math.toRadians(baseLat))
+        val safeCosLat = if (abs(cosLat) < 0.0001) 0.0001 else cosLat
+        val randomLng = baseLng + ((w * cos(t)) / safeCosLat)
 
         for (provider in providers) {
             try {
-                val loc = Location(provider).apply {
+                val loc = locationCache.getOrPut(provider) { Location(provider) }.apply {
                     latitude = randomLat
                     longitude = randomLng
                     altitude = 50.0
