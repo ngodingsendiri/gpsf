@@ -161,7 +161,7 @@ class MockLocationService : Service() {
     }
 
     private fun createNotificationChannel() {
-        val channel = NotificationChannel("fake_gps", "Mock GPS", NotificationManager.IMPORTANCE_LOW)
+        val channel = NotificationChannel("fake_gps", "gpsf Service", NotificationManager.IMPORTANCE_LOW)
         getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
     }
 
@@ -174,7 +174,7 @@ class MockLocationService : Service() {
         val builder = Notification.Builder(this, "fake_gps")
         val coordText = String.format(java.util.Locale.US, "Lokasi: %.5f, %.5f (Jitter 50m)", lat, lng)
 
-        return builder.setContentTitle("MockGPS Aktif")
+        return builder.setContentTitle("gpsf Aktif")
             .setContentText(coordText)
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setContentIntent(pi)

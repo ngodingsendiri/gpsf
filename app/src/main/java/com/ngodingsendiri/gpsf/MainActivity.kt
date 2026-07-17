@@ -71,7 +71,7 @@ class MainActivity : ComponentActivity() {
                     if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()
                 }
             ) {
-                MockGpsApp()
+                GpsfApp()
             }
         }
     }
@@ -98,9 +98,9 @@ fun PulsingDot() {
 }
 
 @Composable
-fun MockGpsApp() {
+fun GpsfApp() {
     val ctx = LocalContext.current
-    val sharedPrefs = remember(ctx) { ctx.getSharedPreferences("mock_gps_prefs", Context.MODE_PRIVATE) }
+    val sharedPrefs = remember(ctx) { ctx.getSharedPreferences("gpsf_prefs", Context.MODE_PRIVATE) }
 
     var lat by remember { mutableDoubleStateOf(sharedPrefs.getFloat("lat", -6.2000f).toDouble()) }
     var lng by remember { mutableDoubleStateOf(sharedPrefs.getFloat("lng", 106.8166f).toDouble()) }
