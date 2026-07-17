@@ -11,8 +11,8 @@ android {
         applicationId = "com.ngodingsendiri.gpsf"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "2.0"
+        versionCode = 3
+        versionName = "2.1"
         vectorDrawables {
             useSupportLibrary = true
         }
@@ -43,6 +43,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     composeOptions {

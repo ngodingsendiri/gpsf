@@ -82,9 +82,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.collectLatest
-import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapEventsReceiver
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
@@ -138,13 +136,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val osmPrefs = getSharedPreferences(GpsfConstants.OSM_PREFS, Context.MODE_PRIVATE)
-        Configuration.getInstance().apply {
-            load(this@MainActivity, osmPrefs)
-            userAgentValue = packageName
-            cacheMapTileCount = 12.toShort()
-            cacheMapTileOvershoot = 4.toShort()
-        }
+        // Must run before any MapView is created.
+        OsmMapConfig.init(this)
 
         val perms = mutableListOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
@@ -432,6 +425,8 @@ fun OsmMap(
     var circle by remember { mutableStateOf<Polygon?>(null) }
     val isDark = isSystemInDarkTheme()
     val currentOnSelect by rememberUpdatedState(onSelect)
+    val currentLat by rememberUpdatedState(lat)
+    val currentLng by rememberUpdatedState(lng)
 
     val fillColor = remember(isDark) {
         AndroidColor.parseColor(if (isDark) "#4490CAF9" else "#441976D2")
@@ -453,13 +448,22 @@ fun OsmMap(
     AndroidView(
         modifier = modifier,
         factory = { viewCtx ->
-            MapView(viewCtx).apply {
-                setTileSource(TileSourceFactory.MAPNIK)
-                setMultiTouchControls(true)
-                zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
-                controller.setZoom(17.5)
+            // Ensure config is applied even if Activity recreated oddly.
+            OsmMapConfig.init(viewCtx)
 
-                val pt = GeoPoint(lat, lng)
+            MapView(viewCtx).apply {
+                // Prefer Carto CDN (reliable HTTPS); OSM policy-friendly with our UA.
+                setTileSource(OsmMapConfig.CARTO_VOYAGER)
+                setMultiTouchControls(true)
+                setTilesScaledToDpi(true)
+                isHorizontalMapRepetitionEnabled = true
+                isVerticalMapRepetitionEnabled = false
+                minZoomLevel = 3.0
+                maxZoomLevel = 20.0
+                zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
+
+                val pt = GeoPoint(currentLat, currentLng)
+                controller.setZoom(17.0)
                 controller.setCenter(pt)
 
                 val c = Polygon().apply {
@@ -476,6 +480,7 @@ fun OsmMap(
                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                     icon = ContextCompat.getDrawable(viewCtx, R.drawable.ic_pin)
                     infoWindow = null
+                    setOnMarkerClickListener { _, _ -> true }
                 }
                 overlays.add(m)
                 marker = m
@@ -493,32 +498,56 @@ fun OsmMap(
                         override fun longPressHelper(p: GeoPoint?) = false
                     })
                 )
+
+                // Critical: activity is usually already RESUMED when Compose builds MapView,
+                // so Lifecycle ON_RESUME will not fire again. Without this, tiles stay blank.
+                onResume()
                 mapView = this
             }
         },
-        update = {
+        update = { view ->
             val pt = GeoPoint(lat, lng)
             marker?.position = pt
             circle?.points = circlePoints
             circle?.fillPaint?.color = fillColor
             circle?.outlinePaint?.color = outlineColor
-            it.invalidate()
+            view.invalidate()
         }
     )
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, mapView) {
+        val map = mapView
+        if (map == null) {
+            return@DisposableEffect onDispose { }
+        }
+
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_RESUME -> mapView?.onResume()
-                Lifecycle.Event.ON_PAUSE -> mapView?.onPause()
+                Lifecycle.Event.ON_RESUME -> {
+                    map.onResume()
+                    map.invalidate()
+                }
+                Lifecycle.Event.ON_PAUSE -> map.onPause()
                 else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
+
+        // If already resumed when effect attaches, start the tile engine now.
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            map.onResume()
+            map.invalidate()
+        }
+
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            mapView?.onDetach()
+            try {
+                map.onPause()
+                map.onDetach()
+            } catch (_: Exception) {
+                // Best-effort teardown.
+            }
             mapView = null
             marker = null
             circle = null
