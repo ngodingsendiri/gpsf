@@ -1,0 +1,16 @@
+# Prevent line-ending conversion from corrupting binary files
+*.jar binary
+*.jks binary
+*.apk binary
+*.so binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+
+# Gradle wrapper scripts: keep Unix LF for CI/Linux runners
+gradlew text eol=lf
+gradlew.bat text eol=crlf
+*.properties text eol=lf
+*.kts text eol=lf
+*.gradle text eol=lf

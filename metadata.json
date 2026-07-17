@@ -1,6 +1,8 @@
 {
   "name": "gpsf",
-  "description": "An Android application for mocking GPS location.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "description": "Android mock location / fake GPS app with OpenStreetMap and Material 3.",
+  "package": "com.ngodingsendiri.gpsf",
+  "minSdk": 26,
+  "targetSdk": 34,
+  "versionName": "2.0"
 }

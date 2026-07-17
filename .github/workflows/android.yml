@@ -29,22 +29,41 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform & build-tools
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager --install "platforms;android-34" "build-tools;34.0.0"
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          validate-wrappers: false
+          validate-wrappers: true
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build with Gradle
-        run: ./gradlew assembleDebug
+      - name: Verify Gradle wrapper JAR
+        run: |
+          set -euo pipefail
+          test -f gradle/wrapper/gradle-wrapper.jar
+          test -s gradle/wrapper/gradle-wrapper.jar
+          jar tf gradle/wrapper/gradle-wrapper.jar >/dev/null
+          echo "gradle-wrapper.jar is a valid archive ($(wc -c < gradle/wrapper/gradle-wrapper.jar) bytes)"
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --stacktrace --no-daemon
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: gpsf-apk
           path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
 
       - name: Determine Tag Name
         id: tag_info
@@ -64,7 +83,7 @@ jobs:
         if: steps.tag_info.outputs.IS_RELEASE == 'true'
         run: |
           mkdir -p release-artifacts
-          cp app/build/outputs/apk/debug/*.apk release-artifacts/gpsf-${{ steps.tag_info.outputs.TAG_NAME }}.apk
+          cp app/build/outputs/apk/debug/*.apk "release-artifacts/gpsf-${{ steps.tag_info.outputs.TAG_NAME }}.apk"
 
       - name: Create GitHub Release and Upload APK
         if: steps.tag_info.outputs.IS_RELEASE == 'true'
@@ -77,10 +96,10 @@ jobs:
           name: Release ${{ steps.tag_info.outputs.TAG_NAME }}
           body: |
             Automated Release of gpsf ${{ steps.tag_info.outputs.TAG_NAME }}!
-            
+
             ### Fitur & Perubahan
-            - Membangun otomatis dari commit: ${{ github.sha }}
-            - Gpsf (Mock Location GPS) siap pasang
-            - Desain modern Material 3 menggunakan Jetpack Compose
+            - Membangun otomatis dari commit: `${{ github.sha }}`
+            - Mock location GPS via peta OpenStreetMap
+            - Material 3 + Jetpack Compose
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

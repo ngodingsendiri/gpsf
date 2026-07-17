@@ -1,9 +1,49 @@
+# Built application files
+*.apk
+*.ap_
+*.aab
+
+# Files for the ART/Dalvik VM
+*.dex
+
+# Java class files
+*.class
+
+# Generated files
+bin/
+gen/
+out/
+release/
+
+# Gradle
+.gradle/
+build/
+**/build/
+
+# Local configuration
+local.properties
+
+# IDE
 *.iml
-.gradle
 .idea/
-/local.properties
-/.idea/workspace.xml
-/.idea/libraries
+.vscode/
+*.swp
+*.swo
+
+# OS
 .DS_Store
-/build
-/captures
+Thumbs.db
+
+# Captures / profiling
+captures/
+*.hprof
+
+# Keystores (keep secrets out of git; use CI secrets for release)
+*.jks
+*.keystore
+
+# Kotlin
+.kotlin/
+
+# Misc
+*.log

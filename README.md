@@ -1,72 +1,80 @@
 # gpsf 📍
 
-Aplikasi simulator GPS/Mock Location modern untuk Android yang dirancang dengan **Jetpack Compose** dan **Material Design 3**. Aplikasi ini memungkinkan Anda untuk mensimulasikan lokasi GPS perangkat Anda ke koordinat mana pun di seluruh dunia dengan antarmuka yang bersih, intuitif, dan responsif.
+Aplikasi **mock location / fake GPS** untuk Android, dibangun dengan **Jetpack Compose** dan **Material Design 3**. Pilih titik di peta OpenStreetMap, lalu aplikasi mensimulasikan lokasi perangkat ke koordinat tersebut (dengan jitter radius 50 m).
 
 ---
 
-## 🚀 Fitur Utama
+## Fitur
 
-- **Antarmuka Jetpack Compose Modern**: Memanfaatkan komponen Material 3, lengkap dengan dukungan Mode Gelap (Dark Mode) dinamis.
-- **Mocking Lokasi Presisi**: Menggunakan standar Android Mock Location API terbaru yang aman, efisien, dan stabil.
-- **Peta Interaktif**: Didukung oleh OpenStreetMap (OSMDroid) yang cepat untuk mencari dan memilih koordinat dengan sekali ketuk.
-- **Joystick Melayang (Floating Joystick)**: Kontrol posisi koordinat Anda secara real-time dari aplikasi lain dengan panel joystick overlay yang responsif.
-- **Mode Pergerakan Fleksibel**:
-  - **Jump Mode**: Berpindah tempat secara instan ke koordinat target.
-  - **Flight Mode**: Bergerak secara mulus (linear interpolation) menuju lokasi baru dalam rentang waktu tertentu.
-- **Sistem Bookmark / Favorit**: Simpan lokasi favorit Anda untuk digunakan kembali dengan cepat.
-
----
-
-## 📥 Unduh APK Rilis Terbaru
-
-Setiap ada pembaruan di repository ini, file APK akan dibangun secara otomatis menggunakan GitHub Actions. Anda dapat mengunduh versi rilis terbaru di sini:
-
-👉 **[Unduh gpsf APK Terbaru (Halaman Rilis GitHub)](../../releases/latest)**
-
-*(Catatan: Jika Anda baru pertama kali mengimpor repository ini, buat Git Tag seperti `v1.0.0` dan push ke GitHub untuk memicu rilis otomatis pertama).*
+- UI modern Material 3 (termasuk dynamic color di Android 12+)
+- Peta interaktif OpenStreetMap (osmdroid) — ketuk untuk memilih koordinat
+- Foreground service mock GPS + Network provider
+- Jitter acak dalam radius 50 m agar lokasi tidak terlihat “beku”
+- Tombol pintas ke **Developer Options** (untuk pilih mock location app)
+- Notifikasi saat mocking aktif
+- Mode gelap / terang mengikuti sistem
 
 ---
 
-## 🛠️ Persyaratan Sistem
+## Unduh APK
 
-- **Android 8.0 (Oreo) / API Level 26 atau di atasnya**.
-- Koneksi internet aktif untuk memuat peta.
-- Izin yang diperlukan:
-  - **Izin Lokasi** (`ACCESS_FINE_LOCATION`)
-  - **Izin Notifikasi** (Android 13+)
-  - **Izin Gambar di Atas Aplikasi Lain** (Overlay) untuk memfungsikan Joystick Melayang.
+Setiap push ke `main`/`master` (dan tag `v*`) memicu GitHub Actions untuk membangun APK:
 
----
+👉 **[Releases](../../releases/latest)**
 
-## 📖 Cara Menggunakan & Menginstal
-
-1. **Unduh & Pasang**: Unduh file APK terbaru dari halaman Releases di atas, lalu instal di ponsel Anda.
-2. **Aktifkan Opsi Pengembang**:
-   - Buka **Pengaturan** > **Tentang Ponsel**.
-   - Ketuk **Nomor Bentukan (Build Number)** sebanyak 7 kali hingga muncul pesan bahwa Opsi Pengembang telah aktif.
-3. **Pilih Aplikasi Lokasi Palsu (Mock Location App)**:
-   - Buka **Pengaturan** > **Opsi Pengembang**.
-   - Cari opsi **Pilih aplikasi lokasi palsu (Select mock location app)**.
-   - Pilih aplikasi **gpsf**.
-4. **Mulai Simulasi**:
-   - Buka aplikasi **gpsf**.
-   - Cari atau pilih titik lokasi pada peta.
-   - Ketuk tombol **Start**.
-   - Izinkan notifikasi dan overlay saat diminta agar Joystick Melayang dapat muncul di atas aplikasi lain (seperti Google Maps, dll.).
+Artifact juga diunggah di tab **Actions** tiap workflow run.
 
 ---
 
-## 🤖 Otomatisasi GitHub Actions (CI/CD)
+## Persyaratan
 
-Repository ini telah dikonfigurasi dengan alur kerja **GitHub Actions** (`.github/workflows/android.yml`) yang andal:
-- **Build Otomatis**: Setiap push ke cabang `main` atau `master` akan memicu kompilasi otomatis untuk memastikan kode bebas dari error.
-- **Pembuatan Rilis Otomatis**: Ketika Anda membuat tag baru dengan format `v*` (misal: `v1.0.0`, `v1.0.1`), GitHub Actions akan:
-  1. Mengompilasi kode menjadi file APK rilis.
-  2. Membuat draf rilis baru di halaman GitHub Releases secara otomatis.
-  3. Mengunggah file APK siap pakai langsung ke rilis tersebut.
+| Item | Detail |
+|------|--------|
+| Android | **8.0 (API 26)** ke atas |
+| Internet | Diperlukan untuk tile peta |
+| Izin | Lokasi (fine/coarse), notifikasi (Android 13+) |
+| Pengaturan | Aplikasi ini harus dipilih sebagai **Mock location app** di Developer Options |
 
-### Cara Memicu Rilis Baru:
-Cukup jalankan perintah berikut di komputer Anda setelah melakukan commit baru:
+---
+
+## Cara pakai
+
+1. Instal APK dari Releases.
+2. Aktifkan **Opsi Pengembang** (ketuk *Build number* 7× di *Tentang ponsel*).
+3. **Pengaturan → Opsi Pengembang → Pilih aplikasi lokasi palsu** → pilih **gpsf**.
+4. Buka **gpsf**, ketuk peta untuk menaruh pin, lalu tekan tombol **Play**.
+5. Untuk menghentikan, tekan tombol **Stop** (ikon X).
+
+---
+
+## Build lokal
+
+```bash
+# JDK 17+ dan Android SDK (platform 34) diperlukan
+./gradlew assembleDebug
+```
+
+APK output:
+
+```text
+app/build/outputs/apk/debug/app-debug.apk
+```
+
+Windows:
+
+```bat
+gradlew.bat assembleDebug
+```
+
+---
+
+## CI/CD
+
+Workflow: [`.github/workflows/android.yml`](.github/workflows/android.yml)
+
+- **PR / push**: `assembleDebug`, unggah artifact APK
+- **Push main/master atau tag `v*`**: buat GitHub Release + lampirkan APK
+
 ```bash
 git tag v1.0.0
 git push origin v1.0.0
@@ -74,15 +82,22 @@ git push origin v1.0.0
 
 ---
 
-## 🏗️ Struktur Proyek
+## Struktur
 
-Aplikasi dikembangkan menggunakan arsitektur modern Android:
-- **`MainActivity.kt`**: Logika UI berbasis Jetpack Compose dan integrasi OpenStreetMap.
-- **`MockLocationService.kt`**: Foreground Service latar belakang yang mengontrol Mock Provider dan menyinkronkan koordinat GPS secara real-time.
-- **Jetpack Navigation**: Penjelajahan antar layar yang aman dan terstruktur.
+| File | Peran |
+|------|--------|
+| `MainActivity.kt` | UI Compose, peta OSM, start/stop mock |
+| `MockLocationService.kt` | Foreground service + test location providers |
+| `GpsfConstants.kt` | Konstanta bersama (radius, default koordinat) |
+| `app/build.gradle.kts` | Modul Android (Compose, osmdroid) |
 
 ---
 
-## 📝 Lisensi
+## Catatan
 
-Proyek ini dilisensikan di bawah **MIT License**.
+- Mock location hanya berfungsi jika **gpsf** dipilih sebagai mock location app di Developer Options.
+- Fitur ini untuk pengujian / pengembangan. Gunakan secara bertanggung jawab.
+
+## Lisensi
+
+MIT

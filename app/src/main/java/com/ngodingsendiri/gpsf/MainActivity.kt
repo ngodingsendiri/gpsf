@@ -3,74 +3,169 @@ package com.ngodingsendiri.gpsf
 import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color as AndroidColor
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import kotlinx.coroutines.flow.collectLatest
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polygon
+import java.util.Locale
+import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 
+private fun Context.startMockService(intent: Intent) {
+    try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            @Suppress("DEPRECATION")
+            startService(intent)
+        }
+    } catch (e: Exception) {
+        Toast.makeText(
+            this,
+            "Gagal memulai service: ${e.message ?: e.javaClass.simpleName}",
+            Toast.LENGTH_LONG
+        ).show()
+    }
+}
+
+private fun Context.openDeveloperSettings() {
+    val candidates = listOf(
+        Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS),
+        Intent(Settings.ACTION_DEVICE_INFO_SETTINGS)
+    )
+    for (intent in candidates) {
+        try {
+            startActivity(intent)
+            return
+        } catch (_: Exception) {
+            // try next
+        }
+    }
+    Toast.makeText(this, "Tidak dapat membuka Developer Options", Toast.LENGTH_SHORT).show()
+}
+
 class MainActivity : ComponentActivity() {
-    private val permLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {}
+    private val permLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { /* no-op */ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        Configuration.getInstance().load(this, getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
-        Configuration.getInstance().userAgentValue = packageName
-        Configuration.getInstance().cacheMapTileCount = 12.toShort()
-        Configuration.getInstance().cacheMapTileOvershoot = 4.toShort()
-        
-        val perms = mutableListOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
-        if (Build.VERSION.SDK_INT >= 28) perms.add(Manifest.permission.FOREGROUND_SERVICE)
-        if (Build.VERSION.SDK_INT >= 33) perms.add(Manifest.permission.POST_NOTIFICATIONS)
+
+        val osmPrefs = getSharedPreferences(GpsfConstants.OSM_PREFS, Context.MODE_PRIVATE)
+        Configuration.getInstance().apply {
+            load(this@MainActivity, osmPrefs)
+            userAgentValue = packageName
+            cacheMapTileCount = 12.toShort()
+            cacheMapTileOvershoot = 4.toShort()
+        }
+
+        val perms = mutableListOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            perms.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
         permLauncher.launch(perms.toTypedArray())
 
         setContent {
-            MaterialTheme(
-                colorScheme = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    if (isSystemInDarkTheme()) dynamicDarkColorScheme(this) else dynamicLightColorScheme(this)
-                } else {
-                    if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()
-                }
-            ) {
+            val dark = isSystemInDarkTheme()
+            val colorScheme = when {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && dark ->
+                    dynamicDarkColorScheme(this)
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+                    dynamicLightColorScheme(this)
+                dark -> darkColorScheme()
+                else -> lightColorScheme()
+            }
+            MaterialTheme(colorScheme = colorScheme) {
                 GpsfApp()
             }
         }
@@ -100,21 +195,30 @@ fun PulsingDot() {
 @Composable
 fun GpsfApp() {
     val ctx = LocalContext.current
-    val sharedPrefs = remember(ctx) { ctx.getSharedPreferences("gpsf_prefs", Context.MODE_PRIVATE) }
+    val sharedPrefs = remember(ctx) {
+        ctx.getSharedPreferences(GpsfConstants.PREFS_NAME, Context.MODE_PRIVATE)
+    }
 
-    var lat by remember { mutableDoubleStateOf(sharedPrefs.getFloat("lat", -6.2000f).toDouble()) }
-    var lng by remember { mutableDoubleStateOf(sharedPrefs.getFloat("lng", 106.8166f).toDouble()) }
+    var lat by remember {
+        mutableDoubleStateOf(
+            sharedPrefs.getFloat(GpsfConstants.PREF_LAT, GpsfConstants.DEFAULT_LAT.toFloat()).toDouble()
+        )
+    }
+    var lng by remember {
+        mutableDoubleStateOf(
+            sharedPrefs.getFloat(GpsfConstants.PREF_LNG, GpsfConstants.DEFAULT_LNG.toFloat()).toDouble()
+        )
+    }
     var centerMapTrigger by remember { mutableIntStateOf(0) }
-    
+
     val isRunning by MockLocationService.isRunning.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Restore last coordinates from running service if active when app opens
     LaunchedEffect(Unit) {
         if (MockLocationService.isRunning.value) {
             lat = MockLocationService.currentLat.value
             lng = MockLocationService.currentLng.value
-            centerMapTrigger++ // Center map on active mock pin automatically on start
+            centerMapTrigger++
         }
     }
 
@@ -124,10 +228,33 @@ fun GpsfApp() {
         }
     }
 
+    fun persistAndMaybeRetarget(newLat: Double, newLng: Double) {
+        lat = newLat
+        lng = newLng
+        sharedPrefs.edit()
+            .putFloat(GpsfConstants.PREF_LAT, newLat.toFloat())
+            .putFloat(GpsfConstants.PREF_LNG, newLng.toFloat())
+            .apply()
+        if (isRunning) {
+            ctx.startMockService(
+                Intent(ctx, MockLocationService::class.java).apply {
+                    action = MockLocationService.ACTION_START
+                    putExtra(MockLocationService.EXTRA_LAT, newLat)
+                    putExtra(MockLocationService.EXTRA_LNG, newLng)
+                }
+            )
+        }
+    }
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        snackbarHost = { SnackbarHost(snackbarHostState, modifier = Modifier.navigationBarsPadding()) }
+        snackbarHost = {
+            SnackbarHost(
+                snackbarHostState,
+                modifier = Modifier.navigationBarsPadding()
+            )
+        }
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             OsmMap(
@@ -135,18 +262,7 @@ fun GpsfApp() {
                 lat = lat,
                 lng = lng,
                 centerMapTrigger = centerMapTrigger,
-                onSelect = { newLat, newLng ->
-                    lat = newLat
-                    lng = newLng
-                    sharedPrefs.edit().putFloat("lat", newLat.toFloat()).putFloat("lng", newLng.toFloat()).apply()
-                    if (isRunning) {
-                        ctx.startService(Intent(ctx, MockLocationService::class.java).apply {
-                            action = "START"
-                            putExtra("LAT", lat)
-                            putExtra("LNG", lng)
-                        })
-                    }
-                }
+                onSelect = { newLat, newLng -> persistAndMaybeRetarget(newLat, newLng) }
             )
 
             Column(
@@ -157,19 +273,21 @@ fun GpsfApp() {
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Developer Options Button
                 FilledIconButton(
-                    onClick = { ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)) },
+                    onClick = { ctx.openDeveloperSettings() },
                     modifier = Modifier.size(48.dp),
                     colors = IconButtonDefaults.filledIconButtonColors(
                         containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
                     ),
                     shape = CircleShape
                 ) {
-                    Icon(Icons.Rounded.Settings, "Developer Options", tint = MaterialTheme.colorScheme.onSurface)
+                    Icon(
+                        Icons.Default.Settings,
+                        contentDescription = "Developer Options",
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
                 }
 
-                // Center on Pin Button
                 FilledIconButton(
                     onClick = { centerMapTrigger++ },
                     modifier = Modifier.size(48.dp),
@@ -194,7 +312,9 @@ fun GpsfApp() {
                     .padding(horizontal = 24.dp)
                     .fillMaxWidth(),
                 shape = RoundedCornerShape(28.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+                ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
                 Row(
@@ -212,18 +332,22 @@ fun GpsfApp() {
                                 text = if (isRunning) "Mocking Aktif" else "Pilih Area",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                color = if (isRunning) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                }
                             )
                         }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "${"%.5f".format(lat)}, ${"%.5f".format(lng)}",
+                            text = String.format(Locale.US, "%.5f, %.5f", lat, lng),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Radius 50m (Acak)",
+                            text = "Radius ${GpsfConstants.JITTER_RADIUS_METERS.toInt()}m (Acak)",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.outline
                         )
@@ -232,23 +356,45 @@ fun GpsfApp() {
                     FloatingActionButton(
                         onClick = {
                             if (isRunning) {
-                                ctx.startService(Intent(ctx, MockLocationService::class.java).apply { action = "STOP" })
+                                ctx.startService(
+                                    Intent(ctx, MockLocationService::class.java).apply {
+                                        action = MockLocationService.ACTION_STOP
+                                    }
+                                )
                             } else {
-                                sharedPrefs.edit().putFloat("lat", lat.toFloat()).putFloat("lng", lng.toFloat()).apply()
-                                val intent = Intent(ctx, MockLocationService::class.java).apply {
-                                    action = "START"
-                                    putExtra("LAT", lat)
-                                    putExtra("LNG", lng)
-                                }
-                                ctx.startService(intent)
+                                sharedPrefs.edit()
+                                    .putFloat(GpsfConstants.PREF_LAT, lat.toFloat())
+                                    .putFloat(GpsfConstants.PREF_LNG, lng.toFloat())
+                                    .apply()
+                                ctx.startMockService(
+                                    Intent(ctx, MockLocationService::class.java).apply {
+                                        action = MockLocationService.ACTION_START
+                                        putExtra(MockLocationService.EXTRA_LAT, lat)
+                                        putExtra(MockLocationService.EXTRA_LNG, lng)
+                                    }
+                                )
                             }
                         },
-                        containerColor = if (isRunning) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = if (isRunning) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer,
-                        elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 0.dp, pressedElevation = 0.dp)
+                        containerColor = if (isRunning) {
+                            MaterialTheme.colorScheme.errorContainer
+                        } else {
+                            MaterialTheme.colorScheme.primaryContainer
+                        },
+                        contentColor = if (isRunning) {
+                            MaterialTheme.colorScheme.onErrorContainer
+                        } else {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        },
+                        elevation = FloatingActionButtonDefaults.elevation(
+                            defaultElevation = 0.dp,
+                            pressedElevation = 0.dp
+                        )
                     ) {
                         AnimatedContent(targetState = isRunning, label = "icon") { running ->
-                            Icon(if (running) Icons.Default.Close else Icons.Default.PlayArrow, "Toggle")
+                            Icon(
+                                imageVector = if (running) Icons.Default.Close else Icons.Default.PlayArrow,
+                                contentDescription = if (running) "Stop mock" else "Start mock"
+                            )
                         }
                     }
                 }
@@ -258,14 +404,16 @@ fun GpsfApp() {
 }
 
 fun getCirclePoints(centerLat: Double, centerLng: Double, radiusMeters: Double): List<GeoPoint> {
-    val points = mutableListOf<GeoPoint>()
+    val points = ArrayList<GeoPoint>(73)
     val earthRadius = 6378137.0
+    val cosLat = cos(centerLat * PI / 180.0)
+    val safeCosLat = if (abs(cosLat) < 1e-6) 1e-6 else cosLat
     for (i in 0..360 step 5) {
-        val angle = i * Math.PI / 180.0
+        val angle = i * PI / 180.0
         val dx = radiusMeters * cos(angle)
         val dy = radiusMeters * sin(angle)
-        val lat = centerLat + (180 / Math.PI) * (dy / earthRadius)
-        val lng = centerLng + (180 / Math.PI) * (dx / earthRadius) / cos(centerLat * Math.PI / 180.0)
+        val lat = centerLat + (180.0 / PI) * (dy / earthRadius)
+        val lng = centerLng + (180.0 / PI) * (dx / earthRadius) / safeCosLat
         points.add(GeoPoint(lat, lng))
     }
     return points
@@ -273,9 +421,9 @@ fun getCirclePoints(centerLat: Double, centerLng: Double, radiusMeters: Double):
 
 @Composable
 fun OsmMap(
-    modifier: Modifier = Modifier, 
-    lat: Double, 
-    lng: Double, 
+    modifier: Modifier = Modifier,
+    lat: Double,
+    lng: Double,
     centerMapTrigger: Int,
     onSelect: (Double, Double) -> Unit
 ) {
@@ -285,27 +433,30 @@ fun OsmMap(
     val isDark = isSystemInDarkTheme()
     val currentOnSelect by rememberUpdatedState(onSelect)
 
-    // Optimize: Cache the 72 point allocations, only recalculate when lat/lng shifts
-    val circlePoints = remember(lat, lng) {
-        getCirclePoints(lat, lng, 50.0)
+    val fillColor = remember(isDark) {
+        AndroidColor.parseColor(if (isDark) "#4490CAF9" else "#441976D2")
+    }
+    val outlineColor = remember(isDark) {
+        AndroidColor.parseColor(if (isDark) "#8890CAF9" else "#881976D2")
     }
 
-    // Handles manual centering requests from the floating center-on-pin action button
+    val circlePoints = remember(lat, lng) {
+        getCirclePoints(lat, lng, GpsfConstants.JITTER_RADIUS_METERS)
+    }
+
     LaunchedEffect(centerMapTrigger) {
         if (centerMapTrigger > 0) {
-            mapView?.let {
-                it.controller.animateTo(GeoPoint(lat, lng))
-            }
+            mapView?.controller?.animateTo(GeoPoint(lat, lng))
         }
     }
 
     AndroidView(
         modifier = modifier,
-        factory = { ctx ->
-            MapView(ctx).apply {
+        factory = { viewCtx ->
+            MapView(viewCtx).apply {
                 setTileSource(TileSourceFactory.MAPNIK)
                 setMultiTouchControls(true)
-                zoomController.setVisibility(org.osmdroid.views.CustomZoomButtonsController.Visibility.NEVER)
+                zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
                 controller.setZoom(17.5)
 
                 val pt = GeoPoint(lat, lng)
@@ -313,8 +464,8 @@ fun OsmMap(
 
                 val c = Polygon().apply {
                     points = circlePoints
-                    fillPaint.color = android.graphics.Color.parseColor(if(isDark) "#4490CAF9" else "#441976D2")
-                    outlinePaint.color = android.graphics.Color.parseColor(if(isDark) "#8890CAF9" else "#881976D2")
+                    fillPaint.color = fillColor
+                    outlinePaint.color = outlineColor
                     outlinePaint.strokeWidth = 3f
                 }
                 overlays.add(c)
@@ -323,22 +474,25 @@ fun OsmMap(
                 val m = Marker(this).apply {
                     position = pt
                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                    icon = androidx.core.content.ContextCompat.getDrawable(ctx, R.drawable.ic_pin)
+                    icon = ContextCompat.getDrawable(viewCtx, R.drawable.ic_pin)
                     infoWindow = null
                 }
                 overlays.add(m)
                 marker = m
 
-                overlays.add(MapEventsOverlay(object : MapEventsReceiver {
-                    override fun singleTapConfirmedHelper(p: GeoPoint?): Boolean {
-                        p?.let {
-                            currentOnSelect(it.latitude, it.longitude)
-                            controller.animateTo(it) // Smoothly center on selection
+                overlays.add(
+                    MapEventsOverlay(object : MapEventsReceiver {
+                        override fun singleTapConfirmedHelper(p: GeoPoint?): Boolean {
+                            p?.let {
+                                currentOnSelect(it.latitude, it.longitude)
+                                controller.animateTo(it)
+                            }
+                            return true
                         }
-                        return true
-                    }
-                    override fun longPressHelper(p: GeoPoint?) = false
-                }))
+
+                        override fun longPressHelper(p: GeoPoint?) = false
+                    })
+                )
                 mapView = this
             }
         },
@@ -346,8 +500,8 @@ fun OsmMap(
             val pt = GeoPoint(lat, lng)
             marker?.position = pt
             circle?.points = circlePoints
-            circle?.fillPaint?.color = android.graphics.Color.parseColor(if(isDark) "#4490CAF9" else "#441976D2")
-            circle?.outlinePaint?.color = android.graphics.Color.parseColor(if(isDark) "#8890CAF9" else "#881976D2")
+            circle?.fillPaint?.color = fillColor
+            circle?.outlinePaint?.color = outlineColor
             it.invalidate()
         }
     )
@@ -356,19 +510,18 @@ fun OsmMap(
     DisposableEffect(lifecycleOwner, mapView) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_RESUME -> {
-                    mapView?.onResume()
-                }
-                Lifecycle.Event.ON_PAUSE -> {
-                    mapView?.onPause()
-                }
-                else -> {}
+                Lifecycle.Event.ON_RESUME -> mapView?.onResume()
+                Lifecycle.Event.ON_PAUSE -> mapView?.onPause()
+                else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             mapView?.onDetach()
+            mapView = null
+            marker = null
+            circle = null
         }
     }
 }
